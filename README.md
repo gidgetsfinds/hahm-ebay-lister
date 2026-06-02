@@ -181,4 +181,10 @@ flowchart TD
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Use it, fork it, share it.
+**Functional Source License (FSL-1.1-MIT)** — see [LICENSE](LICENSE).
+
+In plain English: **free to use, modify, and self-host** — including for your
+own reselling business. The one thing you *can't* do is sell this software or
+offer it as a competing paid product/service. Two years after each release, that
+restriction lifts and it becomes plain MIT. Use it, fork it, share it — just
+don't resell it.
