@@ -141,6 +141,19 @@ function resolveCategory(listing: ListingResult): {
   return { categoryId, fallbacks };
 }
 
+// eBay rejects any item-specific (aspect) value longer than this (error 25002).
+const MAX_ASPECT_VALUE_LEN = 65;
+
+// Clip an aspect value to eBay's limit, breaking at a word boundary when the
+// truncation point lands far enough in to leave a readable phrase.
+function clipAspectValue(s: string): string {
+  const t = (s || "").trim();
+  if (t.length <= MAX_ASPECT_VALUE_LEN) return t;
+  const cut = t.slice(0, MAX_ASPECT_VALUE_LEN);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > MAX_ASPECT_VALUE_LEN * 0.6 ? cut.slice(0, lastSpace) : cut).trim();
+}
+
 function singleValue(v: unknown): string {
   if (Array.isArray(v)) {
     for (const x of v) {
@@ -170,8 +183,8 @@ function departmentForCategory(catKey: string): string {
 function buildAspects(listing: ListingResult, catKey: string): Record<string, string[]> {
   const aspects: Record<string, string[]> = {};
   const put = (k: string, v: string) => {
-    const val = (v || "").trim();
-    if (val) aspects[k] = [val.slice(0, 65)];
+    const val = clipAspectValue(v);
+    if (val) aspects[k] = [val];
   };
 
   put("Brand", String(listing.brand || "").trim());
@@ -181,7 +194,7 @@ function buildAspects(listing: ListingResult, catKey: string): Record<string, st
   put("Type", String(listing.item_type || "").trim());
 
   const feats = Array.isArray(listing.key_features) ? listing.key_features : [];
-  const cleanFeats = feats.map((f) => String(f).trim()).filter(Boolean).slice(0, 5);
+  const cleanFeats = feats.map((f) => clipAspectValue(String(f))).filter(Boolean).slice(0, 5);
   if (cleanFeats.length) aspects.Features = cleanFeats;
 
   if (APPAREL_CATEGORIES.has(catKey) || catKey === "accessory") {
@@ -198,8 +211,8 @@ function buildAspects(listing: ListingResult, catKey: string): Record<string, st
   // Merge in the model-provided item specifics (skip blanks + section labels).
   for (const [k, v] of Object.entries(listing.item_specifics || {})) {
     if (!k || k.startsWith("---")) continue;
-    const val = singleValue(v);
-    if (val && !aspects[k]) aspects[k] = [val.slice(0, 65)];
+    const val = clipAspectValue(singleValue(v));
+    if (val && !aspects[k]) aspects[k] = [val];
   }
   return aspects;
 }
