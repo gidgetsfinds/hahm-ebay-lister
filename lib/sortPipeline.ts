@@ -9,7 +9,7 @@ import {
 import { labeledContent, toImageBlock, type WireImage } from "@/lib/images";
 
 const GROUP_MODEL = "claude-fable-5";
-const CHECK_MODEL = "claude-haiku-4-5-20251001";
+const CHECK_MODEL = "claude-fable-5";
 const BATCH_SIZE = 10;
 
 // Concurrency caps — keep parallel bursts gentle so we don't trip Anthropic's
