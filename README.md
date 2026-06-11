@@ -125,6 +125,7 @@ and redeploy with `vercel --prod`.
 | Variable | Required | What it is |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | ✅ | Your Anthropic API key (writes the listings) |
+| `APP_SECRET` | strongly recommended | Access code protecting the AI endpoints so strangers can't spend your Anthropic credits. The app asks for it once per device and remembers it. |
 | `EBAY_CLIENT_ID` | for posting | eBay App ID |
 | `EBAY_CLIENT_SECRET` | for posting | eBay Cert ID |
 | `EBAY_RU_NAME` | for posting | Your eBay RuName |

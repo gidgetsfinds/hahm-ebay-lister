@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import { getClient, parseModelJson } from "@/lib/anthropic";
+import { guardApiRequest, safeErrorResponse } from "@/lib/api-guard";
 import {
   PROFILE_ROUTER_PROMPT,
   buildProfiledAnalysisPrompt,
@@ -63,6 +64,9 @@ function firstText(resp: Anthropic.Message): string {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = guardApiRequest(req);
+  if (denied) return denied;
+
   let body: AnalyzeRequestBody;
   try {
     body = (await req.json()) as AnalyzeRequestBody;
@@ -143,8 +147,6 @@ export async function POST(req: NextRequest) {
     }
     throw lastErr;
   } catch (e) {
-    const message =
-      e instanceof Error ? e.message : "Something went wrong analyzing photos.";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return safeErrorResponse("analyze", e, "Something went wrong analyzing photos — please try again.");
   }
 }

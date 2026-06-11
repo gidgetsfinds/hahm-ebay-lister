@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiPost } from "@/lib/api-client";
 import { resizeImage } from "@/lib/resize";
 import { buildSku } from "@/lib/sku";
 import { EbayConnect } from "./EbayConnect";
@@ -136,16 +137,12 @@ export default function Home() {
     setSorting(true);
     setError(null);
     try {
-      const res = await fetch("/api/sort", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Use the small thumbnail for sorting to keep the payload small.
-          images: photos.map((p) => ({
-            mediaType: p.mediaType,
-            data: p.previewUrl.split(",")[1],
-          })),
-        }),
+      const res = await apiPost("/api/sort", {
+        // Use the small thumbnail for sorting to keep the payload small.
+        images: photos.map((p) => ({
+          mediaType: p.mediaType,
+          data: p.previewUrl.split(",")[1],
+        })),
       });
       const data = (await readJson(res)) as SortResponse;
       if (!data.ok || !data.groups) {
@@ -246,11 +243,7 @@ export default function Home() {
         )
       );
       try {
-        const res = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profile: "auto", images: imgs }),
-        });
+        const res = await apiPost("/api/analyze", { profile: "auto", images: imgs });
         const data = (await readJson(res)) as AnalyzeResponse;
         if (!data.ok || !data.listing) {
           throw new Error(data.error || "Could not write this listing.");

@@ -21,6 +21,13 @@ async function aesKey(): Promise<CryptoKey> {
   if (!secret) {
     throw new Error("SESSION_SECRET is not set. Add it in Vercel env vars.");
   }
+  if (secret.length < 32) {
+    // A short human-chosen passphrase would make the cookie encryption
+    // brute-forceable. Require real entropy.
+    throw new Error(
+      'SESSION_SECRET must be at least 32 characters. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
+  }
   const hash = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(secret)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClient } from "@/lib/anthropic";
+import { guardApiRequest, safeErrorResponse } from "@/lib/api-guard";
 import { sortPhotos } from "@/lib/sortPipeline";
 import type { WireImage } from "@/lib/images";
 
@@ -9,6 +10,9 @@ export const maxDuration = 120;
 const MAX_PHOTOS = 120;
 
 export async function POST(req: NextRequest) {
+  const denied = guardApiRequest(req);
+  if (denied) return denied;
+
   let body: { images?: WireImage[] };
   try {
     body = await req.json();
@@ -47,7 +51,6 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Sorting failed.";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return safeErrorResponse("sort", e, "Sorting failed — please try again.");
   }
 }
