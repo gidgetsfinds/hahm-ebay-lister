@@ -30,14 +30,15 @@ function toImageBlocks(images: AnalyzeRequestBody["images"]): ImageBlock[] {
 async function routeProfile(
   client: Anthropic,
   imageBlocks: ImageBlock[],
-  requested: string
+  requested: string,
+  routerModel: string
 ): Promise<string> {
   const forced = normalizeItemProfile(requested);
   if (forced !== "auto") return forced;
 
   try {
     const resp = await client.messages.create({
-      model: ROUTER_MODEL,
+      model: routerModel,
       max_tokens: 300,
       messages: [
         {
@@ -77,6 +78,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const analysisModel =
+    typeof body.analysisModel === "string" && body.analysisModel.trim()
+      ? body.analysisModel.trim()
+      : ANALYSIS_MODEL;
+  const routerModel =
+    typeof body.routerModel === "string" && body.routerModel.trim()
+      ? body.routerModel.trim()
+      : ROUTER_MODEL;
+
   if (!Array.isArray(body.images) || body.images.length === 0) {
     return NextResponse.json(
       { ok: false, error: "Please add at least one photo." },
@@ -103,7 +113,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const profile = await routeProfile(client, imageBlocks, body.profile);
+    const profile = await routeProfile(client, imageBlocks, body.profile, routerModel);
     const systemPrompt = buildProfiledAnalysisPrompt(profile);
 
     // Retry up to 3 times, mirroring the Python analyze_photos() loop.
@@ -111,7 +121,7 @@ export async function POST(req: NextRequest) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const resp = await client.messages.create({
-          model: ANALYSIS_MODEL,
+          model: analysisModel,
           max_tokens: 3000,
           // System prompt is large and identical across requests for the same
           // profile — cache it to cut cost and latency.
