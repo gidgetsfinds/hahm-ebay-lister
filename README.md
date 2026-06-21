@@ -53,10 +53,14 @@ You can get your own copy running without ever opening a terminal.
 
    [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ashnicholes-droid/hahm-ebay-lister)
 
-   When Vercel asks for **Environment Variables**, paste in at least your
-   `ANTHROPIC_API_KEY`. (You can add the eBay ones later.) Click **Deploy** and
-   wait about a minute — you'll get a web address like
-   `https://your-app.vercel.app`.
+   When Vercel asks for **Environment Variables**, set **both** of these:
+   - `ANTHROPIC_API_KEY` — your Anthropic key (starts with `sk-ant-`).
+   - `APP_SECRET` — any access code you make up (a memorable phrase works). A
+     deployed app **won't run without this**: it stops strangers from spending
+     your Anthropic credits, and every AI action returns an error until it's set.
+
+   (You can add the eBay variables later.) Click **Deploy** and wait about a
+   minute — you'll get a web address like `https://your-app.vercel.app`.
 
 **3. Bookmark your app** on your computer and add it to your phone's home
    screen. You can start sorting and writing listings immediately.
@@ -125,7 +129,7 @@ and redeploy with `vercel --prod`.
 | Variable | Required | What it is |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | ✅ | Your Anthropic API key (writes the listings) |
-| `APP_SECRET` | strongly recommended | Access code protecting the AI endpoints so strangers can't spend your Anthropic credits. The app asks for it once per device and remembers it. |
+| `APP_SECRET` | ✅ for deployed apps | Access code protecting the AI endpoints so strangers can't spend your Anthropic credits. **A deployed (production) app fails closed without it** — every AI route returns an error until it's set. Asked for once per device, then remembered. Optional only for local dev. |
 | `EBAY_CLIENT_ID` | for posting | eBay App ID |
 | `EBAY_CLIENT_SECRET` | for posting | eBay Cert ID |
 | `EBAY_RU_NAME` | for posting | Your eBay RuName |
