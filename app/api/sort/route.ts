@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const denied = guardApiRequest(req);
   if (denied) return denied;
 
-  let body: { images?: WireImage[] };
+  let body: { images?: WireImage[]; sortModel?: string };
   try {
     body = await req.json();
   } catch {
@@ -24,6 +24,10 @@ export async function POST(req: NextRequest) {
   }
 
   const images = Array.isArray(body.images) ? body.images.slice(0, MAX_PHOTOS) : [];
+  const sortModel =
+    typeof body.sortModel === "string" && body.sortModel.trim()
+      ? body.sortModel.trim()
+      : undefined;
   if (images.length === 0) {
     return NextResponse.json(
       { ok: false, error: "Please add some photos first." },
@@ -42,7 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await sortPhotos(client, images);
+    const result = await sortPhotos(client, images, sortModel);
     if (result.groups.length === 0) {
       return NextResponse.json(
         {
