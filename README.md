@@ -117,7 +117,8 @@ and redeploy with `vercel --prod`.
    - **Auth declined URL:** `https://your-app.vercel.app/?ebay=declined`
    - **Privacy policy URL:** `https://your-app.vercel.app/privacy`
    - Choose **OAuth** (not Auth'n'Auth).
-3. Copy the generated **RuName**.
+3. Copy the generated **RuName** — the short identifier (like `Name-XXXX-XXXX-XXXX`),
+   **not** the long "eBay Production Sign In (OAuth)" URL shown on the same page.
 4. Put all the values into Vercel's env vars (below) and redeploy.
 5. On the live site, click **Connect eBay**, approve on eBay, and paste the URL
    from eBay's confirmation page back into the app. Done (lasts ~18 months).
@@ -143,7 +144,7 @@ and redeploy with `vercel --prod`.
 | `APP_SECRET` | ✅ for deployed apps | Access code protecting the AI endpoints so strangers can't spend your Anthropic credits. **A deployed (production) app fails closed without it** — every AI route returns an error until it's set. Asked for once per device, then remembered. Optional only for local dev. |
 | `EBAY_CLIENT_ID` | for posting | eBay App ID |
 | `EBAY_CLIENT_SECRET` | for posting | eBay Cert ID |
-| `EBAY_RU_NAME` | for posting | Your eBay RuName |
+| `EBAY_RU_NAME` | for posting | Your eBay RuName — the short `Name-XXXX-XXXX-XXXX` identifier, **not** the long "Sign In (OAuth)" URL |
 | `SESSION_SECRET` | for posting | Random string to encrypt your eBay token. Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `APP_URL` | for posting | Your deployed URL, e.g. `https://your-app.vercel.app` |
 | `EBAY_LOCATION_POSTAL_CODE` | optional | Your ZIP (only used once to create an eBay inventory location) |

@@ -33,13 +33,16 @@ export function buildAuthorizeUrl(state: string): string {
   return `${EBAY_OAUTH_URL}?${params.toString()}`;
 }
 
-// Turn eBay's raw token-endpoint failure into an actionable message.
-// The two failures people actually hit are credential and code problems, and
-// eBay distinguishes them clearly enough to give a targeted hint:
+// Turn eBay's raw token-endpoint failure into an actionable message. eBay
+// distinguishes the failures people actually hit clearly enough to give each a
+// targeted hint:
 //   401 / invalid_client → the App ID + Cert ID pair was rejected. This is the
 //     first step that sends the Cert ID, so the consent screen having worked
 //     doesn't rule it out. Almost always a wrong/mis-pasted EBAY_CLIENT_SECRET,
 //     a Sandbox-vs-Production keyset mix-up, or env vars set but not redeployed.
+//   invalid_request → eBay rejected the redirect_uri, which is the RuName.
+//     Usually EBAY_RU_NAME holds the long "Sign In (OAuth)" URL instead of the
+//     short RuName identifier (or it doesn't match the keyset).
 //   invalid_grant → the authorization code (or refresh token) itself is bad,
 //     expired, or already used — not a credentials problem.
 function tokenErrorMessage(status: number, body: string): string {
@@ -50,6 +53,13 @@ function tokenErrorMessage(status: number, body: string): string {
       "(Cert ID) and EBAY_CLIENT_ID (App ID) come from the same Production keyset — sandbox " +
       "keys won't work — have no stray spaces or line breaks, and that you redeployed in " +
       "Vercel after setting them."
+    );
+  }
+  if (/invalid_request/i.test(body)) {
+    return (
+      "eBay rejected the request parameters (400 invalid_request) — specifically the redirect " +
+      "URI, which is your RuName. Make sure EBAY_RU_NAME is the short RuName identifier (like " +
+      '"Name-XXXX-XXXX-XXXX"), not the long "eBay Production Sign In (OAuth)" URL, then redeploy.'
     );
   }
   if (/invalid_grant/i.test(body)) {
