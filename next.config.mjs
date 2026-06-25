@@ -28,21 +28,8 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              // Next.js inlines runtime scripts/styles; tighten to nonces if needed.
-              "script-src 'self' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              // blob:/data: for in-browser photo resizing previews
-              "img-src 'self' data: blob: https://i.ebayimg.com",
-              "connect-src 'self'",
-              "frame-src 'none'",
-              "object-src 'none'",
-              "base-uri 'self'",
-            ].join("; "),
-          },
+          // Content-Security-Policy is set per-request by middleware.ts using a
+          // random nonce, so it cannot be a static header here.
         ],
       },
     ];
