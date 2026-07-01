@@ -209,6 +209,30 @@ export default function Home() {
     });
   };
 
+  // Reorder photos within a group. The array order is the eBay photo order
+  // (index 0 = cover/gallery image), so this is all that's needed — `writeGroup`
+  // and `postGroup` re-derive their image order from `photoIds` at call time.
+  const reorderPhoto = (groupId: string, fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    setGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g;
+        if (
+          fromIndex < 0 ||
+          toIndex < 0 ||
+          fromIndex >= g.photoIds.length ||
+          toIndex >= g.photoIds.length
+        ) {
+          return g;
+        }
+        const next = [...g.photoIds];
+        const [moved] = next.splice(fromIndex, 1);
+        next.splice(toIndex, 0, moved);
+        return { ...g, photoIds: next };
+      })
+    );
+  };
+
   const deleteGroup = (groupId: string) =>
     setGroups((prev) => {
       const target = prev.find((g) => g.id === groupId);
@@ -505,6 +529,7 @@ export default function Home() {
           onRename={rename}
           onRenameSku={renameSku}
           onMovePhoto={movePhoto}
+          onReorderPhoto={reorderPhoto}
           onDeleteGroup={deleteGroup}
           onAddGroup={addGroup}
           onWriteAll={writeAll}
