@@ -1,36 +1,84 @@
 import { NextRequest, NextResponse } from "next/server";
-import type Anthropic from "@anthropic-ai/sdk";
-import { getClient, parseModelJson, AnthropicAuthError, anthropicAuthError } from "@/lib/anthropic";
+import OpenAI from "openai";
+import { getOpenAIClient, OpenAIAuthError, openAIAuthError } from "@/lib/openai";
 import { guardApiRequest, safeErrorResponse } from "@/lib/api-guard";
 import {
   PROFILE_ROUTER_PROMPT,
   buildProfiledAnalysisPrompt,
   normalizeItemProfile,
 } from "@/lib/prompts";
-import { toImageBlock, type ImageBlock } from "@/lib/images";
-import { resolveModel } from "@/lib/models";
 import type { AnalyzeRequestBody, ListingResult } from "@/lib/types";
 
-// Analysis can take 20-40s for a multi-photo item. Give it room.
 export const maxDuration = 60;
 
-const ANALYSIS_MODEL = "claude-opus-4-8";
-const ROUTER_MODEL = "claude-sonnet-4-6";
+const ANALYSIS_MODEL = "gpt-4.1-mini";
+const ROUTER_MODEL = "gpt-4.1-mini";
 const MAX_IMAGES = 12;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_MEDIA = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-function toImageBlocks(images: AnalyzeRequestBody["images"]): ImageBlock[] {
-  const blocks: ImageBlock[] = [];
+type OpenAIImageContent = {
+  type: "image_url";
+  image_url: { url: string };
+};
+
+type OpenAITextContent = {
+  type: "text";
+  text: string;
+};
+
+function rawBase64(data: string): string {
+  return data.includes(",") ? data.split(",")[1] : data;
+}
+
+function toOpenAIImageBlock(
+  img: AnalyzeRequestBody["images"][number] | undefined
+): OpenAIImageContent | null {
+  if (!img?.data || !ALLOWED_MEDIA.has(img.mediaType)) return null;
+
+  const data = rawBase64(img.data);
+  if (data.length * 0.75 > MAX_IMAGE_BYTES) return null;
+
+  return {
+    type: "image_url",
+    image_url: {
+      url: `data:${img.mediaType};base64,${data}`,
+    },
+  };
+}
+
+function toImageBlocks(images: AnalyzeRequestBody["images"]): OpenAIImageContent[] {
+  const blocks: OpenAIImageContent[] = [];
+
   for (const img of images.slice(0, MAX_IMAGES)) {
-    const block = toImageBlock(img);
+    const block = toOpenAIImageBlock(img);
+   
     if (block) blocks.push(block);
   }
+
   return blocks;
 }
 
-// Mirrors route_item_profile(): honor a forced profile, else ask the model.
+function firstText(resp: OpenAI.Chat.Completions.ChatCompletion): string {
+  return resp.choices[0]?.message?.content?.trim() ?? "";
+}
+
+function parseJson<T = unknown>(raw: string): T {
+  let text = (raw || "").trim();
+  text = text.replace(/^```(?:json)?\s*/gm, "").replace(/\s*```$/gm, "");
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]) as T;
+    throw new Error("Model did not return valid JSON.");
+  }
+}
+
 async function routeProfile(
-  client: Anthropic,
-  imageBlocks: ImageBlock[],
+  client: OpenAI,
+  imageBlocks: OpenAIImageContent[],
   requested: string,
   routerModel: string
 ): Promise<string> {
@@ -38,34 +86,32 @@ async function routeProfile(
   if (forced !== "auto") return forced;
 
   try {
-    const resp = await client.messages.create({
+    const resp = await client.chat.completions.create({
       model: routerModel,
-      max_tokens: 300,
+      temperature: 0,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "user",
           content: [
             ...imageBlocks,
-            { type: "text", text: PROFILE_ROUTER_PROMPT },
-          ],
+            {
+              type: "text",
+              text: PROFILE_ROUTER_PROMPT + "\n\nReturn JSON only.",
+            },
+          ] as Array<OpenAIImageContent | OpenAITextContent>,
         },
       ],
     });
-    const text = firstText(resp);
-    const data = parseModelJson<{ profile?: string }>(text);
+
+    const data = parseJson<{ profile?: string }>(firstText(resp));
     const routed = normalizeItemProfile(data?.profile ?? "auto");
     return routed !== "auto" ? routed : "hard_goods";
   } catch (e) {
-    // Auth/billing failures must surface, not silently fall back to a profile.
-    const fatal = anthropicAuthError(e);
+    const fatal = openAIAuthError(e);
     if (fatal) throw fatal;
     return "hard_goods";
   }
-}
-
-function firstText(resp: Anthropic.Message): string {
-  const block = resp.content.find((b) => b.type === "text");
-  return block && block.type === "text" ? block.text.trim() : "";
 }
 
 export async function POST(req: NextRequest) {
@@ -73,6 +119,7 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   let body: AnalyzeRequestBody;
+
   try {
     body = (await req.json()) as AnalyzeRequestBody;
   } catch {
@@ -82,12 +129,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validate client-supplied models against the server allowlist; fall back to
-  // the trusted default on anything unknown (prevents billing an arbitrary or
-  // premium model to the owner's key).
-  const analysisModel = resolveModel(body.analysisModel, ANALYSIS_MODEL);
-  const routerModel = resolveModel(body.routerModel, ROUTER_MODEL);
-
   if (!Array.isArray(body.images) || body.images.length === 0) {
     return NextResponse.json(
       { ok: false, error: "Please add at least one photo." },
@@ -96,6 +137,8 @@ export async function POST(req: NextRequest) {
   }
 
   const imageBlocks = toImageBlocks(body.images);
+  const sellerFacts = (body.sellerFacts ?? "").trim();
+
   if (imageBlocks.length === 0) {
     return NextResponse.json(
       { ok: false, error: "No readable photos found. Use JPG, PNG, or WebP." },
@@ -103,9 +146,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let client: Anthropic;
+  let client: OpenAI;
+
   try {
-    client = getClient();
+    client = getOpenAIClient();
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: (e as Error).message },
@@ -114,56 +158,86 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const profile = await routeProfile(client, imageBlocks, body.profile, routerModel);
+    const profile = await routeProfile(client, imageBlocks, body.profile, ROUTER_MODEL);
     const systemPrompt = buildProfiledAnalysisPrompt(profile);
 
-    // Retry up to 3 times, mirroring the Python analyze_photos() loop.
     let lastErr: unknown = null;
+
     for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const resp = await client.messages.create({
-          model: analysisModel,
-          max_tokens: 3000,
-          // System prompt is large and identical across requests for the same
-          // profile — cache it to cut cost and latency.
-          system: [
+  try {
+    const resp = await client.chat.completions.create({
+      model: ANALYSIS_MODEL,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            systemPrompt +
+            "\n\nReturn valid JSON only. Do not include markdown or commentary.",
+        },
+        {
+          role: "user",
+          content: [
+            ...imageBlocks,
             {
               type: "text",
-              text: systemPrompt,
-              cache_control: { type: "ephemeral" },
+              text:
+  (sellerFacts
+    ? `SELLER VERIFIED FACTS — HIGHEST PRIORITY:
+${sellerFacts}
+
+Before using these notes, silently correct obvious spelling mistakes, typos, capitalization, and common jewelry/resale terminology.
+
+Examples:
+- sterlling → sterling
+- predidium → Presidium
+- coroo → Coro
+- vintge → vintage
+- goldtone → gold tone
+- silvertone → silver tone
+- earings → earrings
+- braclet → bracelet
+- neckace → necklace
+
+Do not change the meaning. Do not add new facts. Do not mention spelling corrections.
+
+Treat the corrected seller facts as true. If seller facts conflict with photo guesses, ALWAYS use the seller facts.
+
+`
+    : "") + "Analyze these photos and return the listing JSON now.",
             },
-          ],
-          messages: [
-            {
-              role: "user",
-              content: [
-                ...imageBlocks,
-                {
-                  type: "text",
-                  text: "Analyze these photos and return the listing JSON now.",
-                },
-              ],
-            },
-          ],
-        });
-        const listing = parseModelJson<ListingResult>(firstText(resp));
-        listing.item_profile = profile;
-        return NextResponse.json({ ok: true, listing });
-      } catch (err) {
-        const fatal = anthropicAuthError(err);
-        if (fatal) throw fatal; // auth/billing won't fix itself on retry
-        lastErr = err;
-        if (attempt < 2) {
-          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-        }
-      }
+          ] as Array<OpenAIImageContent | OpenAITextContent>,
+        },
+      ],
+    });
+
+    const listing = parseJson<ListingResult>(firstText(resp));
+    listing.item_profile = profile;
+
+    return NextResponse.json({ ok: true, listing });
+  } catch (err) {
+    const fatal = openAIAuthError(err);
+    if (fatal) throw fatal;
+
+    lastErr = err;
+
+    if (attempt < 2) {
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
     }
+  }
+}
     throw lastErr;
   } catch (e) {
-    if (e instanceof AnthropicAuthError) {
+    if (e instanceof OpenAIAuthError) {
       console.error("[analyze] auth/billing failure:", e.message);
       return NextResponse.json({ ok: false, error: e.message }, { status: e.status });
     }
-    return safeErrorResponse("analyze", e, "Something went wrong analyzing photos — please try again.");
+
+    return safeErrorResponse(
+      "analyze",
+      e,
+      "Something went wrong analyzing photos — please try again."
+    );
   }
 }

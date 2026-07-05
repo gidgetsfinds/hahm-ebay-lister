@@ -9,6 +9,7 @@ interface ReviewBoardProps {
   photoById: (id: string) => Photo | undefined;
   onRename: (groupId: string, name: string) => void;
   onRenameSku: (groupId: string, sku: string) => void;
+  onSellerFactsChange: (groupId: string, sellerFacts: string) => void;
   onMovePhoto: (photoId: string, toGroupId: string | "orphans") => void;
   onReorderPhoto: (groupId: string, fromIndex: number, toIndex: number) => void;
   onDeleteGroup: (groupId: string) => void;
@@ -168,6 +169,7 @@ export function ReviewBoard({
   photoById,
   onRename,
   onRenameSku,
+  onSellerFactsChange,
   onMovePhoto,
   onReorderPhoto,
   onDeleteGroup,
@@ -222,18 +224,35 @@ export function ReviewBoard({
               </button>
             </header>
             {group.photoIds.length === 0 ? (
-              <p className="board-empty">
-                Empty — move photos here using the menu under a photo.
-              </p>
-            ) : (
-              <PhotoGrid
-                group={group}
-                groups={groups}
-                photoById={photoById}
-                onMovePhoto={onMovePhoto}
-                onReorderPhoto={onReorderPhoto}
-              />
-            )}
+  <p className="board-empty">
+    Empty — move photos here using the menu under a photo.
+  </p>
+) : (
+  <>
+    <PhotoGrid
+      group={group}
+      groups={groups}
+      photoById={photoById}
+      onMovePhoto={onMovePhoto}
+      onReorderPhoto={onReorderPhoto}
+    />
+
+    <label className="result-field" style={{ marginTop: "0.75rem" }}>
+      Seller Verified Facts
+      <textarea
+        value={group.sellerFacts ?? ""}
+        onChange={(e) => onSellerFactsChange(group.id, e.target.value)}
+        placeholder={`Examples:
+Real pearls
+Tests sterling
+Modern artisan
+Signed Coro
+Not vintage`}
+        rows={4}
+      />
+    </label>
+  </>
+)}
           </article>
         ))}
       </div>

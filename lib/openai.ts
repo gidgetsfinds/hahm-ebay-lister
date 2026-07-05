@@ -1,10 +1,9 @@
 import OpenAI from "openai";
 
 let client: OpenAI | null = null;
-
 export function getOpenAIClient(): OpenAI {
+  const apiKey = process.env.OPENAI_API_KEY;
 
-console.log("Key prefix:", apiKey?.substring(0, 8));
   if (!apiKey) {
     throw new Error(
       "OPENAI_API_KEY is not set. Add it in .env.local for local dev or in Vercel → Settings → Environment Variables."
@@ -18,7 +17,7 @@ console.log("Key prefix:", apiKey?.substring(0, 8));
   return client;
 }
 
-export class OpenAIAuthError extends Error {
+ export class OpenAIAuthError extends Error {
   status: number;
 
   constructor(message: string, status: number) {

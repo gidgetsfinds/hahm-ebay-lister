@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getClient, AnthropicAuthError } from "@/lib/anthropic";
+import { getOpenAIClient, OpenAIAuthError } from "@/lib/openai";
 import { guardApiRequest, safeErrorResponse } from "@/lib/api-guard";
 import { sortPhotos, SortUnavailableError } from "@/lib/sortPipeline";
 import { isAllowedModel } from "@/lib/models";
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   let client;
   try {
-    client = getClient();
+    client = getOpenAIClient();
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: (e as Error).message },
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    if (e instanceof AnthropicAuthError) {
+      if (e instanceof OpenAIAuthError) {
       console.error("[sort] auth/billing failure:", e.message);
       return NextResponse.json({ ok: false, error: e.message }, { status: e.status });
     }
