@@ -202,13 +202,13 @@ function defaultPackageWeightAndSize(): Record<string, unknown> {
   };
   return {
     weight: {
-      value: num(process.env.EBAY_DEFAULT_PACKAGE_WEIGHT_OZ, 16),
+      value: num(process.env.EBAY_DEFAULT_PACKAGE_WEIGHT_OZ, 5),
       unit: "OUNCE",
     },
     dimensions: {
       length: num(process.env.EBAY_DEFAULT_PACKAGE_LENGTH_IN, 12),
-      width: num(process.env.EBAY_DEFAULT_PACKAGE_WIDTH_IN, 9),
-      height: num(process.env.EBAY_DEFAULT_PACKAGE_HEIGHT_IN, 3),
+      width: num(process.env.EBAY_DEFAULT_PACKAGE_WIDTH_IN, 10),
+      height: num(process.env.EBAY_DEFAULT_PACKAGE_HEIGHT_IN, 1),
       unit: "INCH",
     },
     packageType: "PACKAGE_THICK_ENVELOPE",
@@ -599,9 +599,25 @@ export interface AccountSetup {
   locationKey: string;
 }
 
-function pickFirstPolicy(r: EbayResp, listKey: string, idField: string): string {
+function pickFirstPolicy(
+  r: EbayResp,
+  listKey: string,
+  idField: string,
+  preferredName?: string
+): string {
   if (!r.ok) return "";
   const list = r.json?.[listKey] || [];
+
+  if (preferredName) {
+    const preferred = list.find((p: any) =>
+      String(p.name || "")
+        .trim()
+        .toLowerCase() === preferredName.trim().toLowerCase()
+    );
+
+    if (preferred?.[idField]) return String(preferred[idField]);
+  }
+
   return list.length ? String(list[0][idField] || "") : "";
 }
 
@@ -630,9 +646,24 @@ async function fetchAccountSetupUncached(accessToken: string): Promise<AccountSe
     ebayRequest(accessToken, "GET", `${EBAY_ACC_BASE}/return_policy?${mp}`),
   ]);
   return {
-    fulfillmentPolicyId: pickFirstPolicy(ful, "fulfillmentPolicies", "fulfillmentPolicyId"),
-    paymentPolicyId: pickFirstPolicy(pay, "paymentPolicies", "paymentPolicyId"),
-    returnPolicyId: pickFirstPolicy(ret, "returnPolicies", "returnPolicyId"),
+    fulfillmentPolicyId: pickFirstPolicy(
+  ful,
+  "fulfillmentPolicies",
+  "fulfillmentPolicyId",
+  process.env.EBAY_FULFILLMENT_POLICY_NAME
+),
+paymentPolicyId: pickFirstPolicy(
+  pay,
+  "paymentPolicies",
+  "paymentPolicyId",
+  process.env.EBAY_PAYMENT_POLICY_NAME
+),
+returnPolicyId: pickFirstPolicy(
+  ret,
+  "returnPolicies",
+  "returnPolicyId",
+  process.env.EBAY_RETURN_POLICY_NAME
+),
     locationKey: await fetchOrCreateLocation(accessToken),
   };
 }

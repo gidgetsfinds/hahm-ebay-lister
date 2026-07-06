@@ -406,20 +406,107 @@ const updateSellerFacts = (groupId: string, sellerFacts: string) =>
   setStep("listings");
   await runPool(usable, WRITE_CONCURRENCY, writeGroup);
 };
-  const postAll = async () => {
-    const ready = groups
-      .filter((g) => g.status === "done" && g.postStatus !== "posted")
-      .map((g) => g.id);
-    // Sequential — keeps eBay calls gentle and errors easy to read.
-    for (const id of ready) {
-      await postGroup(id);
-    }
-  };
 
-  const usableGroups = useMemo(
-    () => groups.filter((g) => g.photoIds.length > 0),
-    [groups]
-  );
+const postGroup = useCallback(
+  async (groupId: string) => {
+    const group = groupsRef.current.find((g) => g.id === groupId);
+    if (!group || !group.listing) return;
+
+    const images = group.photoIds
+      .map((id) => photoMap.get(id))
+      .filter((p): p is Photo => Boolean(p))
+      .map((p) => ({ mediaType: p.mediaType, data: p.data }))
+      .slice(0, MAX_PUBLISH_PHOTOS);
+
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId
+          ? { ...g, postStatus: "posting", postError: undefined }
+          : g
+      )
+    );
+
+    try {
+      let data: {
+        success: boolean;
+        listingId?: string;
+        error?: string;
+        alreadyListed?: boolean;
+      } | null = null;
+
+      let hadTransientRetry = false;
+
+      for (let attempt = 0; ; attempt++) {
+        const res = await apiPost("/api/ebay/publish", {
+          sku: group.sku,
+          listing: group.listing,
+          images,
+        });
+
+        if (
+          attempt < 2 &&
+          (res.status === 429 ||
+            res.status === 502 ||
+            res.status === 503 ||
+            res.status === 504)
+        ) {
+          hadTransientRetry = true;
+          await sleep(res.status === 429 ? 65_000 : 8_000);
+          continue;
+        }
+
+        data = await readJson(res);
+        break;
+      }
+
+      if (
+        data &&
+        !data.success &&
+        data.alreadyListed &&
+        hadTransientRetry &&
+        data.listingId
+      ) {
+        data = { success: true, listingId: data.listingId };
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || "eBay rejected the listing.");
+      }
+
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === groupId
+            ? { ...g, postStatus: "posted", listingId: data!.listingId }
+            : g
+        )
+      );
+    } catch (e) {
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === groupId
+            ? { ...g, postStatus: "error", postError: (e as Error).message }
+            : g
+        )
+      );
+    }
+  },
+  [photoMap]
+);
+
+const postAll = async () => {
+  const ready = groups
+    .filter((g) => g.status === "done" && g.postStatus !== "posted")
+    .map((g) => g.id);
+
+  for (const id of ready) {
+    await postGroup(id);
+  }
+};
+
+const usableGroups = useMemo(
+  () => groups.filter((g) => g.photoIds.length > 0),
+  [groups]
+);
 
   return (
     <main className="wrap">
@@ -607,8 +694,8 @@ onEdit={(groupId, patch) =>
     )
   )
 }         onRetry={writeGroup}
-          onPost={() => {}}
-          onPostAll={() => {}}
+          onPost={postGroup}
+          onPostAll={postAll}
           onBack={() => setStep("review")}
         />
       )}
